@@ -4,6 +4,7 @@ const webSocketsServerPortPython = 9000;
 const webSocketServer = require("websocket").server;
 const http = require("http");
 const WebSocket = require("ws");
+var spawn = require("child_process").spawn;
 
 // Spinning the http server for React WebSocket server.
 const serverReact = http.createServer();
@@ -121,6 +122,13 @@ console.log(
   "WebSocket server for Python listening on port",
   webSocketsServerPortPython
 );
+
+wssPython.on("listening", () => {
+  var process = spawn("python", ["./pythonScripts/main2.py"]);
+  process.stdout.on("data", function (data) {
+    console.log(data);
+  });
+});
 
 wssPython.on("connection", function connection(ws) {
   console.log("Connected to Python");
