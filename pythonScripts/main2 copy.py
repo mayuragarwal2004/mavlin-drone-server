@@ -12,65 +12,60 @@ ports = serial.tools.list_ports.comports()
 
 class MavlinkConnector:
     def __init__(self, connection_string, baud=115200):
-        try:
-            # self.vehicle = mavutil.mavlink_connection(connection_string)
+        # self.vehicle = mavutil.mavlink_connection(connection_string)
 
-            # Start SITL if no connection string specified
-            if not connection_string:
-                import dronekit_sitl
-                self.sitl = dronekit_sitl.start_default()
-                connection_string = self.sitl.connection_string()
+        # Start SITL if no connection string specified
+        if not connection_string:
+            import dronekit_sitl
+            self.sitl = dronekit_sitl.start_default()
+            connection_string = self.sitl.connection_string()
 
-            # Connect to the Vehicle.
-            #   Set `wait_ready=True` to ensure default attributes are populated before `connect()` returns.
-            print("\nConnecting to vehicle on: %s" % connection_string)
-            print(baud)
-            self.vehicle = mavutil.mavlink_connection(connection_string, baud)
-            self.vehicle.wait_heartbeat()
-            self.system_id = self.vehicle.target_system
+        # Connect to the Vehicle.
+        #   Set `wait_ready=True` to ensure default attributes are populated before `connect()` returns.
+        print("\nConnecting to vehicle on: %s" % connection_string)
+        print(baud)
+        self.vehicle = mavutil.mavlink_connection(connection_string, baud)
+        self.vehicle.wait_heartbeat()
+        self.system_id = self.vehicle.target_system
 
-            self.message_listeners = {}
+        self.message_listeners = {}
 
-            self.individual_data = {
-                "message_type": "vehicle_data",
-                "systemid": self.system_id,
-                "connection": connection_string,
-                "GPS_RAW_INT": {"lat": None, "lng": None, "alt": None, "eph": None, "epv": None, "satellites_visible": None, "fix_type": None},
-                "GLOBAL_POSITION_INT": {"lat": None, "lng": None, "alt": None, "vx": None, "vy": None, "vz": None},
-                "ATTITUDE": {"roll": 0, "pitch": 0, "yaw": 0, "rollspeed": 0, "pitchspeed": 0, "yawspeed": 0},
-                "Battery": {"current": 0, "level": 0, "voltage": 0},
-                "SYS_STATUS": {"current": None, "level": None, "voltage": None},
-                "EKF_STATUS_REPORT": {"ekf_poshorizabs": False, "ekf_constposmode": False, "ekf_predposhorizabs": False},
-                "HEARTBEAT": {"flightmode": "AUTO", "armed": False, "system_status": None, "autopilot_type": None, "vehicle_type": None},
-                "VFR_HUD": {"heading": None, "groundspeed": None, "airspeed": None, "climb": None, "throttle": None, "alt": None},
-                "RANGEFINDER": {"rngfnd_voltage": None, "rngfnd_distance": None},
-                "MOUNT_STATUS": {"mount_pitch": None, "mount_roll": None, "mount_yaw": None},
-                "AUTOPILOT_VERSION": {"capabilities": None, "raw_version": None, "autopilot_version_msg_count": 0},
-            }
+        self.individual_data = {
+            "message_type": "vehicle_data",
+            "systemid": self.system_id,
+            "connection": connection_string,
+            "GPS_RAW_INT": {"lat": None, "lng": None, "alt": None, "eph": None, "epv": None, "satellites_visible": None, "fix_type": None},
+            "GLOBAL_POSITION_INT": {"lat": None, "lng": None, "alt": None, "vx": None, "vy": None, "vz": None},
+            "ATTITUDE": {"roll": 0, "pitch": 0, "yaw": 0, "rollspeed": 0, "pitchspeed": 0, "yawspeed": 0},
+            "Battery": {"current": 0, "level": 0, "voltage": 0},
+            "SYS_STATUS": {"current": None, "level": None, "voltage": None},
+            "EKF_STATUS_REPORT": {"ekf_poshorizabs": False, "ekf_constposmode": False, "ekf_predposhorizabs": False},
+            "HEARTBEAT": {"flightmode": "AUTO", "armed": False, "system_status": None, "autopilot_type": None, "vehicle_type": None},
+            "VFR_HUD": {"heading": None, "groundspeed": None, "airspeed": None, "climb": None, "throttle": None, "alt": None},
+            "RANGEFINDER": {"rngfnd_voltage": None, "rngfnd_distance": None},
+            "MOUNT_STATUS": {"mount_pitch": None, "mount_roll": None, "mount_yaw": None},
+            "AUTOPILOT_VERSION": {"capabilities": None, "raw_version": None, "autopilot_version_msg_count": 0},
+        }
 
-            self.request_data_streams()
+        self.request_data_streams()
 
-            # initialising all msg callbacks
-            self.add_message_listener('ATTITUDE')(self.attitude_callback)
-            self.add_message_listener('GLOBAL_POSITION_INT')(
-                self.gpspositionint_callback)
-            self.add_message_listener('VFR_HUD')(self.vfrhud_callback)
-            self.add_message_listener('RANGEFINDER')(self.rangefinder_callback)
-            self.add_message_listener('MOUNT_STATUS')(
-                self.mountstatus_callback)
-            self.add_message_listener('AUTOPILOT_VERSION')(
-                self.autopilotversion_callback)
-            self.add_message_listener('SYS_STATUS')(self.sysstatus_callback)
-            self.add_message_listener('GPS_RAW_INT')(self.gpsrawint_callback)
-            self.add_message_listener('EKF_STATUS_REPORT')(
-                self.efkstatusreport_callback)
-            self.add_message_listener('HEARTBEAT')(self.heartbeat_callback)
+        # initialising all msg callbacks
+        self.add_message_listener('ATTITUDE')(self.attitude_callback)
+        self.add_message_listener('GLOBAL_POSITION_INT')(
+            self.gpspositionint_callback)
+        self.add_message_listener('VFR_HUD')(self.vfrhud_callback)
+        self.add_message_listener('RANGEFINDER')(self.rangefinder_callback)
+        self.add_message_listener('MOUNT_STATUS')(self.mountstatus_callback)
+        self.add_message_listener('AUTOPILOT_VERSION')(
+            self.autopilotversion_callback)
+        self.add_message_listener('SYS_STATUS')(self.sysstatus_callback)
+        self.add_message_listener('GPS_RAW_INT')(self.gpsrawint_callback)
+        self.add_message_listener('EKF_STATUS_REPORT')(
+            self.efkstatusreport_callback)
+        self.add_message_listener('HEARTBEAT')(self.heartbeat_callback)
 
-            Thread(target=uploadServerData, args=(self, 1,)).start()
-            Thread(target=self.process_messages, args=()).start()
-        except Exception as e:
-            traceback.print_exc()  # Print the traceback for debugging purposes
-            raise e  # Raise the exception again to propagate it to the caller
+        Thread(target=uploadServerData, args=(self, 1,)).start()
+        Thread(target=self.process_messages, args=()).start()
 
     def request_data_streams(self):
         # Request all data streams
@@ -339,7 +334,7 @@ async def connect_to_server():
                     for port, desc, hwid in sorted(ports):
                         arr.append({"port": port, "desc": desc, "hwid": hwid})
                         # print("{}: {} [{}]".format(port, desc, hwid))
-                    temp_msg = {"message_type": "SystemInfo", "ports": arr}
+                    temp_msg = {"message_type":"SystemInfo", "ports":arr}
                     await uploadServerDataOnce(temp_msg)
                     data['ports'] = arr
 
@@ -348,8 +343,8 @@ async def connect_to_server():
                     # continue
                     connector = MavlinkConnector(
                         connection_string=msg['port'], baud=int(msg['baud']))
-
-                    connections[connector.system_id] = connector
+                    
+                    connections[connector.system_id]=connector
 
                     # @connector.add_message_listener('ATTITUDE')
                     # def attitude_callback(vehicle, name, message):
@@ -370,10 +365,9 @@ async def connect_to_server():
                         for index, i in enumerate(msg['data'], start=0):
                             mission_waypoints.append(mission_item(
                                 index, i['command'], 0, i['p1'], i['p2'], i['p3'], i['p4'], i['p5'], i['p6'], i['p7']))
-                        upload_mission(
-                            connections[msg['systemid']].vehicle, mission_waypoints)
+                        upload_mission(connections[msg['systemid']].vehicle, mission_waypoints)
                         # await websocket.send("Uploaded")
-
+                        
                     elif msg['purpose'] == "Arm":
                         print("Arm requested")
                         print(msg)
@@ -385,8 +379,7 @@ async def connect_to_server():
 
                     elif msg['purpose'] == "Takeoff":
                         print("Takeoff requested")
-                        takeoff(connections[msg['systemid']
-                                            ].vehicle, msg['data']['alt'])
+                        takeoff(connections[msg['systemid']].vehicle, msg['data']['alt'])
 
         # # Prepare data to send
         # data = {
@@ -408,7 +401,6 @@ async def connect_to_server():
         # print("Closing WebSocket connection")
         # await websocket.close()
 
-
 async def uploadServerDataOnce(data):
     print("From upload derver data once")
     global websocket_conn
@@ -417,7 +409,6 @@ async def uploadServerDataOnce(data):
     # Send data via the WebSocket connection
     await websocket_conn.send(message)
     print("Data sent to server")
-
 
 def uploadServerData(object, frequency):  # frequency of 2 Hz = every 0.5 seconds)
     global websocket_conn
