@@ -1,78 +1,153 @@
-const net = require("net");
-const express = require("express");
-const app = express();
-const bodyParser = require("body-parser");
-const port = process.env.PORT || 5000;
+/* eslint-disable default-case */
+const webSocketsServerPortReact = 8000;
+const webSocketsServerPortPython = 9000;
+const webSocketServer = require("websocket").server;
+const http = require("http");
+const WebSocket = require("ws");
 
-const HOST = "127.0.0.1";
-const PORT = 4000;
-const client = new net.Socket();
+// Spinning the http server for React WebSocket server.
+const serverReact = http.createServer();
+serverReact.listen(webSocketsServerPortReact);
+console.log(
+  "WebSocket server for React listening on port",
+  webSocketsServerPortReact
+);
 
-app.use(bodyParser.json());
-
-// This displays message that the server running and listening to specified port
-app.listen(port, () => console.log(`Listening on port ${port}`));
-
-// create a GET route
-app.get("/api", (req, res) => {
-  res.send({ express: "YOUR EXPRESS BACKEND IS CONNECTED TO REACT" });
-  console.log("HI");
+const wsServerReact = new webSocketServer({
+  httpServer: serverReact,
 });
 
-// Write Mission
-app.post("/api/writemission", (req, res) => {
-  console.log(req.body);
+const clientsReact = {};
+let clientPython = null;
 
-  client.connect(PORT, HOST);
-  client.write(JSON.stringify({ purpose: "MissionWrite", data:req.body.pathFull }));
+// This code generates unique userid for every user.
+const getUniqueID = () => {
+  const s4 = () =>
+    Math.floor((1 + Math.random()) * 0x10000)
+      .toString(16)
+      .substring(1);
+  return s4() + s4() + "-" + s4();
+};
 
-  client.on('data', (data) => {
-    console.log(`Received data: ${data}`);
+wsServerReact.on("request", function (request) {
+  var userID = getUniqueID();
+  console.log(
+    new Date() +
+      " Received a new connection for React from origin " +
+      request.origin +
+      "."
+  );
+
+  // You can rewrite this part of the code to accept only the requests from allowed origin
+  const connection = request.accept(null, request.origin);
+  clientsReact[userID] = connection;
+  console.log(
+    "Connected to React: " +
+      userID +
+      " in " +
+      Object.getOwnPropertyNames(clientsReact)
+  );
+
+  connection.on("message", function (message) {
+    if (message.type === "utf8") {
+      console.log("Received Message for React: ", message.utf8Data);
+      message = JSON.parse(message.utf8Data);
+      if (clientPython) {
+        switch (message.purpose) {
+          // connect vehicle
+          case "ConnectVehicle":
+            clientPython.send(
+              JSON.stringify({
+                purpose: "ConnectVehicle",
+                port: message.port,
+                baud: message.baud,
+              })
+            );
+            console.log("Connect Vehicle requested");
+            break;
+
+          // Prt Update
+          case "PortUpdate":
+            clientPython.send(JSON.stringify({ purpose: "PortUpdate" }));
+            console.log("Port update requested");
+            break;
+
+          // Arm
+          case "Arm":
+            clientPython.send(JSON.stringify(message));
+            console.log("Arm requested");
+            break;
+
+          // Disarm
+          case "DisArm":
+            clientPython.send(JSON.stringify(message));
+            console.log("Disarm requested");
+            break;
+
+          // Mission Write
+          case "MissionWrite":
+            clientPython.send(
+              JSON.stringify({
+                purpose: "MissionWrite",
+                data: message.pathfull,
+              })
+            );
+            console.log("Mission Write requested");
+            break;
+
+          // Takeoff
+          case "Takeoff":
+            clientPython.send(
+              JSON.stringify({ purpose: "Takeoff", data: message.data })
+            );
+            console.log("Takeoff requested");
+            break;
+          // case "purpose":
+          //   break;
+        }
+      }
+    }
   });
 
-  client.on('close', () => {
-    console.log('Connection closed');
+  connection.on("close", () => {
+    console.log("connection closed for ", userID);
+    delete clientsReact[userID];
   });
-
-  res.send({ express: "YOUR EXPRESS BACKEND IS CONNECTED TO REACT" });
-  console.log("Write Mission Requested");
 });
 
+// Start WebSocket server for Python
+const wssPython = new WebSocket.Server({ port: webSocketsServerPortPython });
+console.log(
+  "WebSocket server for Python listening on port",
+  webSocketsServerPortPython
+);
 
-// Write Mission
-app.post("/api/arm", (req, res) => {
-  console.log(req.body);
+wssPython.on("connection", function connection(ws) {
+  console.log("Connected to Python");
 
-  client.connect(PORT, HOST);
-  client.write(JSON.stringify({ purpose: "Arm" }));
+  ws.on("message", function incoming(message) {
+    console.log("Received Message for Python");
 
-  client.on('data', (data) => {
-    console.log(`Received data: ${data}`);
+    for (const key in clientsReact) {
+      clientsReact[key].sendUTF(message);
+      console.log("Sent Message to React: ", key);
+    }
+
+    // Process the message received from Python client
+    // ...
+
+    // Example: Send a response back to Python client
+    // ws.send(JSON.stringify({ purpose: "ConnectVehicle" }));
+    // ws.send(JSON.stringify({ purpose: "ConnectVehicle" }));
   });
 
-  client.on('close', () => {
-    console.log('Connection closed');
+  ws.on("close", () => {
+    console.log("Disconnedcted from Python");
+    clientPython = null;
   });
 
-  res.send({ express: "YOUR EXPRESS BACKEND IS CONNECTED TO REACT" });
-  console.log("Arm Requested");
-});
+  // ws.send(JSON.stringify({ purpose: "ConnectVehicle" }));
 
-// Write Mission
-app.post("/api/disarm", (req, res) => {
-  console.log(req.body);
-
-  client.connect(PORT, HOST);
-  client.write(JSON.stringify({ purpose: "Disarm" }));
-
-  client.on('data', (data) => {
-    console.log(`Received data: ${data}`);
-  });
-
-  client.on('close', () => {
-    console.log('Connection closed');
-  });
-
-  res.send({ express: "YOUR EXPRESS BACKEND IS CONNECTED TO REACT" });
-  console.log("Disarm Requested");
+  // Store the WebSocket connection for Python client
+  clientPython = ws;
 });
